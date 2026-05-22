@@ -11,7 +11,7 @@ import {
   type StockInfo, type HeatItem, type SectorItem_real, type KLineData,
 } from '@/services/stockApi';
 import { fetchMarketFlow, type MarketFlow } from '@/services/marketFlow';
-import { scoreCombination, exploreCombinations, runBacktest, ENTRY_SIGNALS, EXIT_SIGNALS } from '@/services/strategyEngine';
+import { exploreCombinations, runBacktest, ENTRY_SIGNALS, EXIT_SIGNALS } from '@/services/strategyEngine';
 import { useApp, type StrategyElement } from '@/contexts/AppContext';
 
 /* ──────────────────────── deterministic helpers ──────────────────────── */
@@ -81,16 +81,32 @@ async function matchBestStrategy(
     return { error: 'kline_fail' };
   }
 
-  let best: StrategyMatch | null = null;
-  let bestScore = -Infinity;
+  let bestWithTrades: StrategyMatch | null = null;
+  let bestScoreWithTrades = -Infinity;
+  let bestOverall: StrategyMatch | null = null;
+  let bestScoreOverall = -Infinity;
 
   // 辅助：评估一个策略组合
   const evaluateCombo = (elements: StrategyElement[], name: string, isCustom: boolean) => {
     try {
       const bt = runBacktest(kline, { elements }, 100000, undefined, code);
-      if (bt.tradeCount > 0 && bt.score > bestScore) {
-        bestScore = bt.score;
-        best = {
+      // 无条件追踪最佳评分（兜底，确保总能选出最优策略）
+      if (bt.score > bestScoreOverall) {
+        bestScoreOverall = bt.score;
+        bestOverall = {
+          name,
+          score: bt.score,
+          entrySignals: elements.filter(e => e.type === 'entry').map(e => e.name).join('+') || '-',
+          exitSignals: elements.filter(e => e.type === 'exit').map(e => e.name).join('+') || '-',
+          isCustom,
+          totalReturn: bt.totalReturn,
+          winRate: bt.winRate,
+        };
+      }
+      // 单独追踪有交易记录的最佳策略
+      if (bt.tradeCount > 0 && bt.score > bestScoreWithTrades) {
+        bestScoreWithTrades = bt.score;
+        bestWithTrades = {
           name,
           score: bt.score,
           entrySignals: elements.filter(e => e.type === 'entry').map(e => e.name).join('+') || '-',
@@ -118,13 +134,13 @@ async function matchBestStrategy(
   }
 
   // 3. 如果核心组合都没交易，尝试exploreCombinations作为补充
-  if (!best) {
+  if (!bestWithTrades && !bestOverall) {
     try {
       const explored = exploreCombinations(kline, 3, undefined, code);
       for (const ex of explored) {
-        if (ex.backtest.tradeCount > 0 && ex.score > bestScore) {
-          bestScore = ex.score;
-          best = {
+        if (ex.backtest.tradeCount > 0 && ex.score > bestScoreWithTrades) {
+          bestScoreWithTrades = ex.score;
+          bestWithTrades = {
             name: ex.combo.name,
             score: ex.score,
             entrySignals: ex.combo.elements.filter(e => e.type === 'entry').map(e => e.name).join('+') || '-',
@@ -138,39 +154,12 @@ async function matchBestStrategy(
     } catch { /* ignore */ }
   }
 
+  // 优先返回有交易记录的策略，没有则返回无条件评分最高的（保证总能匹配到一个策略）
+  const best = bestWithTrades || bestOverall;
   if (!best) {
     return { error: 'no_match' };
   }
   return { match: best };
-}
-
-/** 批量为精选股票运行真实策略匹配 */
-async function generateStrategyMatches(
-  stocks: typeof STOCKS,
-  realDataMap: Record<string, StockInfo>,
-  customStrategies: import('@/contexts/AppContext').CustomStrategy[],
-  onProgress?: (code: string, match: StrategyMatch | null) => void
-): Promise<void> {
-  // 只对有必要跑策略的股票运行匹配（有真实数据且涨跌幅较大）
-  const codesToMatch = stocks
-    .filter(s => {
-      const real = realDataMap[s.code];
-      if (!real) return false;
-      // 只匹配涨跌幅绝对值>1%的股票（有交易机会）
-      return Math.abs(real.changePercent) > 1;
-    })
-    .map(s => s.code);
-
-  // 串行运行避免阻塞（每只股票约500ms-2s）
-  for (const stock of stocks) {
-    if (!codesToMatch.includes(stock.code)) continue;
-    const real = realDataMap[stock.code];
-    const basePrice = real ? real.price : stock.basePrice;
-    try {
-      const result = await matchBestStrategy(stock.code, basePrice, customStrategies);
-      if (onProgress) onProgress(stock.code, result.match || null);
-    } catch { /* ignore */ }
-  }
 }
 
 /* ──────────────────────── data ──────────────────────── */
@@ -1516,7 +1505,7 @@ function HeatTop10Card({ heatTop10 }: { heatTop10: HeatItem[] | null }) {
 /* ──────────────────────── main page ──────────────────────── */
 
 export default function TodayStrategy() {
-  const { customStrategies, loggedIn } = useApp();
+  const { customStrategies } = useApp();
 
   // 存储API获取的真实行情数据 {code: StockInfo}
   const [realDataMap, setRealDataMap] = useState<Record<string, StockInfo>>({});
@@ -1527,9 +1516,6 @@ export default function TodayStrategy() {
   const [heatTop10, setHeatTop10] = useState<HeatItem[] | null>(null);
   // 全市场板块热点（东方财富API）
   const [sectorHeatmap, setSectorHeatmap] = useState<{ upSectors: SectorItem_real[]; downSectors: SectorItem_real[] } | null>(null);
-  // 策略匹配结果 {stockCode: StrategyMatch}
-  const [strategyMatches, setStrategyMatches] = useState<Record<string, StrategyMatch>>({});
-  const [matchingLoading, setMatchingLoading] = useState(false);
 
   // 页面加载时，批量获取：精选股票行情 + 全市场资金流向 + 全市场龙虎榜 + 全市场板块热点
   useEffect(() => {
@@ -1562,24 +1548,6 @@ export default function TodayStrategy() {
     }, 60000);
     return () => { clearInterval(interval); cancelled = true; };
   }, []);
-
-  // 策略匹配：api数据加载完成后启动
-  useEffect(() => {
-    if (apiLoading) return;
-    if (!loggedIn) return; // 未登录不自动匹配（避免性能开销）
-
-    setMatchingLoading(true);
-    generateStrategyMatches(STOCKS, realDataMap, customStrategies, (code, match) => {
-      if (match) {
-        setStrategyMatches(prev => ({ ...prev, [code]: match }));
-      }
-    }).finally(() => setMatchingLoading(false));
-  }, [apiLoading, loggedIn, realDataMap, customStrategies]);
-
-  const stockAdvices = useMemo(
-    () => generateStockAdvice(DAY_SEED, realDataMap),
-    [realDataMap]
-  );
 
   return (
     <div className="min-h-[100dvh] bg-void pt-16">
@@ -1630,38 +1598,6 @@ export default function TodayStrategy() {
 
             {/* Column 4: 全市场成交额热度榜TOP10 */}
             <HeatTop10Card heatTop10={heatTop10} />
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Stocks */}
-      <section className="bg-void py-8 border-t border-[rgba(206,209,213,0.06)]">
-        <div className="max-w-[1400px] mx-auto px-6 lg:px-10">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <h2 className="font-heading text-xl text-pure">精选股票策略</h2>
-              <span className="font-mono text-[10px] text-ash/40">FEATURED_STRATEGIES</span>
-              {matchingLoading && (
-                <span className="flex items-center gap-1.5 font-mono text-[10px] text-apex-green">
-                  <Loader2 size={10} className="animate-spin" />
-                  策略匹配中...
-                </span>
-              )}
-            </div>
-            <span className="font-mono text-[10px] text-ash/30">
-              已匹配{Object.keys(strategyMatches).length}只股票
-              {!loggedIn && '（登录后启用策略匹配）'}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {stockAdvices.slice(0, 9).map((stock, index) => (
-              <StockAdviceCard
-                key={stock.code}
-                stock={stock}
-                index={index}
-                strategyMatch={strategyMatches[stock.code]}
-              />
-            ))}
           </div>
         </div>
       </section>
