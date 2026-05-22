@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 228 18% 5%;
+    --foreground: 220 9% 93%;
+    --card: 228 10% 8%;
+    --card-foreground: 220 9% 93%;
+    --popover: 228 10% 8%;
+    --popover-foreground: 220 9% 93%;
+    --primary: 220 9% 93%;
+    --primary-foreground: 228 18% 5%;
+    --secondary: 228 5% 15%;
+    --secondary-foreground: 220 9% 93%;
+    --muted: 228 5% 15%;
+    --muted-foreground: 220 5% 65%;
+    --accent: 228 5% 15%;
+    --accent-foreground: 220 9% 93%;
+    --destructive: 345 100% 56%;
+    --destructive-foreground: 220 9% 93%;
+    --border: 220 9% 83%;
+    --input: 228 5% 15%;
+    --ring: 154 100% 50%;
+    --radius: 0.5rem;
+    --sidebar-background: 228 18% 5%;
+    --sidebar-foreground: 220 9% 93%;
+    --sidebar-primary: 154 100% 50%;
+    --sidebar-primary-foreground: 228 18% 5%;
+    --sidebar-accent: 228 5% 15%;
+    --sidebar-accent-foreground: 220 9% 93%;
+    --sidebar-border: 228 5% 15%;
+    --sidebar-ring: 154 100% 50%;
+
+    --void: #0B0C10;
+    --deep-space: #15161A;
+    --ash: #CED1D5;
+    --pure: #F4F4F4;
+    --apex-green: #00FF94;
+    --reversion-red: #FF2A6D;
+    --gold-standard: #D4AF37;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-void text-ash;
+    font-family: 'Noto Sans SC', system-ui, sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .data-card {
+    background: rgba(21, 22, 26, 0.6);
+    border: 1px solid rgba(206, 209, 213, 0.1);
+    padding: 24px;
+    position: relative;
+  }
+
+  .data-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 16px;
+    height: 16px;
+    border-top: 2px solid var(--ash);
+    border-left: 2px solid var(--ash);
+    opacity: 0.3;
+  }
+
+  .data-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    border-bottom: 2px solid var(--ash);
+    border-right: 2px solid var(--ash);
+    opacity: 0.3;
+  }
+
+  .strategy-badge-momentum {
+    @apply inline-flex items-center px-3 py-1 text-xs font-mono uppercase tracking-wider bg-black border border-[#00FF94] text-[#00FF94];
+  }
+
+  .strategy-badge-reversion {
+    @apply inline-flex items-center px-3 py-1 text-xs font-mono uppercase tracking-wider bg-black border border-[#FF2A6D] text-[#FF2A6D];
+  }
+
+  .strategy-badge-breakout {
+    @apply inline-flex items-center px-3 py-1 text-xs font-mono uppercase tracking-wider bg-black border border-[#D4AF37] text-[#D4AF37];
+  }
+
+  .strategy-badge-factor {
+    @apply inline-flex items-center px-3 py-1 text-xs font-mono uppercase tracking-wider bg-black border border-[#CED1D5] text-[#CED1D5];
+  }
+
+  .text-giant {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(80px, 12vw, 160px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .text-h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 52px;
+    font-weight: 500;
+    letter-spacing: -1px;
+    line-height: 1.1;
+  }
+
+  .text-h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 36px;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+
+  .text-data-point {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.3;
+  }
+
+  .text-caption {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    line-height: 1.4;
+  }
+}
+
+@layer utilities {
+  .ease-expo-out {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ease-smooth {
+    transition-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+}
